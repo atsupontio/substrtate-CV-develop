@@ -1,0 +1,132 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+/// Edit this file to define custom logic or remove it if it is not needed.
+/// Learn more about FRAME and the core library of Substrate FRAME pallets:
+/// <https://docs.substrate.io/v3/runtime/frame>
+pub use pallet::*;
+
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+#[frame_support::pallet]
+pub mod pallet {
+	// use frame_support::{pallet_prelude::{self::*, ValueQuery}, StorageMap};
+	use frame_support::pallet_prelude::*;
+	use frame_system::pallet_prelude::*;
+	use frame_support::sp_runtime::traits::Hash;
+	use scale_info::TypeInfo;
+use sp_runtime::traits::StaticLookup;
+
+	/// Configure the pallet by specifying the parameters and types on which it depends.
+	#[pallet::config]
+	pub trait Config: frame_system::Config + pallet_cv::Config {
+		/// Because this pallet emits events, it depends on the runtime's definition of an event.
+		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+	}
+
+	type AccountOf<T> = <T as frame_system::Config>::AccountId;
+
+	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Sysman<T: Config> {
+		pub id: AccountOf<T>,
+		pub name: String,
+		pub role: u8,
+		pub role_confirm: u8,
+		pub org_type: String,
+		pub sysman_level: u8,
+		pub parent_sysman_ids: u64,
+		// このきーは怪しい
+		pub cvenkey: T::Hash,
+		pub score: u8,
+		}
+
+	#[pallet::pallet]
+	#[pallet::generate_store(pub(super) trait Store)]
+	pub struct Pallet<T>(_);
+
+	// The pallet's runtime storage items.
+	// https://docs.substrate.io/v3/runtime/storage
+	#[pallet::storage]
+	#[pallet::getter(fn sysman_cnt)]
+	// Learn more about declaring storage items:
+	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
+	// keeps track of the number of sysmans in existence
+	pub(super) type SysmanCnt<T> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn sysmans)]
+	// Stores a sysman's information
+	pub(super) type Sysmans<T: Config> = StorageMap<_, Twox64Concat, T::Hash, Sysman<T>>;
+
+	// Pallets use events to inform users when important changes are made.
+	// https://docs.substrate.io/v3/runtime/events-and-errors
+	#[pallet::event]
+	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// Event documentation should end with an array that provides descriptive names for event
+		/// parameters. [something, who]
+		SomethingStored(u32, T::AccountId),
+	}
+
+	// Errors inform users that something went wrong.
+	#[pallet::error]
+	pub enum Error<T> {
+		/// Error names should be descriptive.
+		NoneValue,
+		/// Errors should have helpful documentation associated with them.
+		StorageOverflow,
+	}
+
+	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
+	// These functions materialize as "extrinsics", which are often compared to transactions.
+	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
+	#[pallet::call]
+	impl<T: Config> Pallet<T> {
+		/// An example dispatchable that takes a singles value as a parameter, writes the value to
+		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
+		#[pallet::weight(10_000)]
+		pub fn approve_sysman(origin: OriginFor<T>, id: AccountOf<T>, owner: <T::Lookup as StaticLookup>::Source) -> DispatchResult {
+			// Check that the extrinsic was signed and get the signer.
+			// This function will return an error if the extrinsic is not signed.
+			// https://docs.substrate.io/v3/runtime/origins
+			let who = ensure_signed(origin)?;
+			let claim_id = <pallet_cv::Pallet<T>>::claim_sysman(id);
+
+			// Update storage.
+			<Sysmans<T>>::try_mutate(id,  |sysman| {
+				sysman.sysman_level = 1
+			});
+
+			// Emit an event.
+			Self::deposit_event(Event::SomethingStored(something, who));
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
+
+		/// An example dispatchable that may throw a custom error.
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
+		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+
+			// Read a value from storage.
+			match <Something<T>>::get() {
+				// Return an error if the value has not been set.
+				None => Err(Error::<T>::NoneValue)?,
+				Some(old) => {
+					// Increment the value read from storage; will error in the event of overflow.
+					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
+					// Update the value in storage with the incremented result.
+					<Something<T>>::put(new);
+					Ok(())
+				},
+			}
+		}
+	}
+}
