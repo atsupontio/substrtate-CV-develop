@@ -1,6 +1,6 @@
 use node_template_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
-	SystemConfig, WASM_BINARY,
+	SystemConfig, WASM_BINARY, SysmanModuleConfig, pallet_sysman::{Role, RoleConfirm}
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -59,6 +59,17 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
 				],
+				vec![(
+					get_account_id_from_seed::<sr25519::Public>("Alice"),
+					None, // name
+					Role::SYSMAN,
+					RoleConfirm::No,
+					None, //org type
+					Some(1), // root
+					None, // parent sysman id
+					None, // cvenkey
+					None, // score
+				)],
 				true,
 			)
 		},
@@ -106,6 +117,17 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
 					get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 				],
+				vec![(
+					get_account_id_from_seed::<sr25519::Public>("Alice"),
+					None, // name
+					Role::SYSMAN,
+					RoleConfirm::No,
+					None, //org type
+					Some(1), // root
+					None, // parent sysman id
+					None, // cvenkey
+					None, // score
+				)],
 				true,
 			)
 		},
@@ -128,6 +150,17 @@ fn testnet_genesis(
 	initial_authorities: Vec<(AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
+	get_sysman: Vec<(
+		AccountId,
+		Option<u8>, // developing
+		Role,
+		RoleConfirm, // Set by Sys-man only
+		Option<u8>, // developing
+		Option<u8>, // Set by Sys-man only
+		Option<node_template_runtime::Hash>, // Set by Sys-man only
+		Option<u8>, // developing
+		Option<u8>,
+		)>,
 	_enable_println: bool,
 ) -> GenesisConfig {
 	GenesisConfig {
@@ -148,6 +181,10 @@ fn testnet_genesis(
 		sudo: SudoConfig {
 			// Assign network admin rights.
 			key: root_key,
+		},
+		sysman_module: SysmanModuleConfig {
+			sysman: get_sysman.iter().cloned().map(|x| (x.0, x.1, x.2, x.3, x.4, x.5, x.6, x.7, x.8)).collect(),
+    		// kitties: vec![(5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY_i32, 0xd4b68690b203ad71c4a5f0a74b30839a, Female)],
 		},
 		transaction_payment: Default::default(),
 	}
