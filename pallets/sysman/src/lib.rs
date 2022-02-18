@@ -17,7 +17,7 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
 	// use frame_support::{pallet_prelude::{self::*, ValueQuery}, StorageMap};
-	use frame_support::{pallet_prelude::*, transactional};
+	use frame_support::{pallet_prelude::*, transactional, Twox64Concat};
 	use frame_system::pallet_prelude::*;
 	use frame_support::sp_runtime::traits::Hash;
 	use scale_info::TypeInfo;
@@ -65,7 +65,7 @@ pub mod pallet {
 		}
 	}
 
-	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
+	#[derive(Clone, Copy, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
 	#[scale_info(skip_type_params(T))]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum Role {
@@ -92,6 +92,11 @@ pub mod pallet {
 
 		/// The origin which may forcibly set or remove a name. Root can always do this.
 		type ForceOrigin: EnsureOrigin<Self::Origin>;
+
+		/// The maximum amount of applicant.
+		#[pallet::constant]
+		type MaxApplicant: Get<u32>;
+
 	}
 
 	// The pallet's runtime storage items.
@@ -143,6 +148,16 @@ pub mod pallet {
 	// Stores a sysman's information
 	pub(super) type Sysmans<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, Human<T>>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn sysman_applicant)]
+	// Stores a sysman's information
+	pub(super) type SysmanApplicants<T: Config> = StorageValue<_, BoundedVec<AccountOf<T>, T::MaxApplicant>, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn score)]
+	// Stores a sysman's information(score, evaluate number)
+	pub(super) type Score<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, (u8, u8)>;
+
 	// Our pallet's genesis configuration.
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -190,13 +205,15 @@ pub mod pallet {
 		InformationCreated(T::AccountId),
 		///parameters. [AccountID]
 		InformationUpdated(T::AccountId),
+		///parameters. [AccountID]
+		SysmanClaimed(T::AccountId),
+		/// parameters[AccounID]
+		ViewPublicProfile(T::AccountId),
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
 		/// Handles checking whether the Sysman exists.
@@ -223,6 +240,11 @@ pub mod pallet {
 		SysmanCntOverflow,
 		/// Handles checking whether the User's Role exists.
 		NotExistRole,
+		NotExistMember,
+		/// An account cannot own more members than `MaxApplicantsCount`.
+		ExceedMaxApplicants,
+		/// An account is already Sysman.
+		AlreadySysman,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -233,6 +255,7 @@ pub mod pallet {
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 		
+		#[transactional]
 		#[pallet::weight(10_000)]
 		pub fn update_info(
 			origin: OriginFor<T>,
@@ -264,38 +287,49 @@ pub mod pallet {
 				}
 			};
 			
-			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
 
 		#[pallet::weight(10_000)]
-		pub fn sudo_update_info(
-			origin: OriginFor<T>,
-			id: T::AccountId,
-			name: Option<u8>,
-			role: Role,
-			role_confirm: RoleConfirm,
-			org_type: Option<u8>,
-			sysman_level: Option<u8>,
-			parent_sysman_ids: Option<T::Hash>,
-			cvenkey: Option<u8>,
-			score: Option<u8>,
-			// owner: <T::Lookup as StaticLookup>::Source
-		) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/v3/runtime/origins
-			T::ForceOrigin::ensure_origin(origin)?;
-			
-			let ex_id = Self::mint(&id, name, role, role_confirm, org_type, sysman_level, parent_sysman_ids,
-				cvenkey, score,
-			)?;
-			
-			// Emit an event.
-			// Self::deposit_event(Event::SudoSomethingStored(ex_id, id.clone()));
-			// Return a successful DispatchResultWithPostInfo
+		pub fn claim_sysman(origin: OriginFor<T>) -> DispatchResult {
+			let origin = ensure_signed(origin)?;
+			let role = Self::who(&origin)?;
+
+			ensure!(role == Role::USER || role == Role::ORG, Error::<T>::AlreadySysman);
+
+			<SysmanApplicants<T>>::try_mutate(|vec| {
+				vec.try_push(origin.clone())
+			}).map_err(|_| <Error<T>>::ExceedMaxApplicants)?;
+
+			Self::deposit_event(Event::SysmanClaimed(origin));
+
 			Ok(())
 		}
+
+		#[pallet::weight(10_000)]
+		pub fn view_public_profile(origin: OriginFor<T>, ex_id: AccountOf<T>) -> DispatchResult {
+			let origin = ensure_signed(origin)?;
+			let member = Self::participants(&ex_id);
+
+			let info = (&ex_id, member.as_ref().unwrap().name, member.as_ref().unwrap().role, member.as_ref().unwrap().org_type, member.as_ref().unwrap().score);
+
+			log::info!("account information {:?}", info);
+			Self::deposit_event(Event::ViewPublicProfile(ex_id));
+
+			Ok(())
+		}
+
+		/* #[pallet::weight(10_000)]
+		pub fn evaluate_org(origin: OriginFor<T>, ex_id: AccountOf<T>, score: u8) -> DispatchResult {
+			ensure_signed(origin)?;
+
+			let evaluate = Self::score(&ex_id);
+			let new_cnt = Self::score(&ex_id).map(|(x, y)| (x.checked_add(score / y.checked_add(1)), y))
+        		.ok_or(<Error<T>>::ParticipantCntOverflow)?;
+			
+			<ParticipantCnt<T>>::put(new_cnt);
+			evaluate.unwrap().score = Some(score);
+		} */
 
 	}
 
@@ -325,6 +359,14 @@ pub mod pallet {
 			};
 
 			Self::do_store(&id, &user)
+		}			
+
+		pub fn who(ex_id: &AccountOf<T>) -> Result<Role, Error<T>> {
+			let member = Self::participants(ex_id);
+			match member {
+				Some(member) => Ok(member.role),
+				None => Err(Error::<T>::NotExistMember)
+			}
 		}
 
 		pub fn is_participant(ex_id: &AccountOf<T>, acct: &Human<T>) -> Result<(), Error<T>> {

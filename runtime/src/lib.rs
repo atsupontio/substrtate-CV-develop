@@ -280,10 +280,15 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
+parameter_types! {
+	pub const MaxApplicant: u32 = 1; // testing
+}
+
 impl pallet_sysman::Config for Runtime {
 	type Event = Event;
 	/// Configure the FRAME System Root Origin as the sysman pallet
 	type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+	type MaxApplicant = MaxApplicant;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
