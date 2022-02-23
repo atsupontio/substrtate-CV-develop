@@ -166,7 +166,7 @@ fn testnet_genesis(
 	initial_authorities: Vec<(AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	get_sysman: Vec<(AccountId, SysManAccount<node_template_runtime::Runtime>)>,
+	get_sysman: Vec<(AccountId, SysManAccount<AccountId>)>,
 	_enable_println: bool,
 ) -> GenesisConfig {
 	GenesisConfig {

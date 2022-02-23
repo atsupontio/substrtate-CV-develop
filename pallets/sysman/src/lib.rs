@@ -23,22 +23,22 @@ pub mod pallet {
 	use pallet_utils::{Role, Status};
 	use sp_std::{str, vec, vec::Vec};
 
-	// #[cfg(feature = "std")]
+	#[cfg(feature = "std")]
   	use serde::{Serialize, Deserialize};
 	// use serde_json::{json, Value};
 
 	type AccountOf<T> = <T as frame_system::Config>::AccountId;
 
 	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
-	#[scale_info(bounds(), skip_type_params(T))]
+	// #[scale_info(bounds(), skip_type_params(T))]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-	pub struct SysManAccount<T: Config> {
+	pub struct SysManAccount<Account> {
 		// pub id: AccountOf<T>,
 		pub role: Role,
 		pub status: Status,
 		pub level: Option<u8>,
-		pub parent: Option<AccountOf<T>>,
-		pub children: Option<Vec<AccountOf<T>>>,
+		pub parent: Option<Account>,
+		pub children: Option<Vec<Account>>,
 		pub metadata: Vec<u8>,
 	}
 
@@ -61,26 +61,26 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn org_storage)]
 	// Stores a sysman's information
-	pub(super) type OrgStorage<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<T>>;
+	pub(super) type OrgStorage<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<AccountOf<T>>>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn org_revoked)]
 	// Stores a sysman's information
-	pub(super) type OrgRevoked<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<T>>;
+	pub(super) type OrgRevoked<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<AccountOf<T>>>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn sysman_storage)]
 	// Stores a sysman's information
-	pub(super) type SysmanStorage<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<T>>;
+	pub(super) type SysmanStorage<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<AccountOf<T>>>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn sysman_revoked)]
 	// Stores a sysman's information
-	pub(super) type SysmanRevoked<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<T>>;
+	pub(super) type SysmanRevoked<T: Config> = StorageMap<_, Twox64Concat, AccountOf<T>, SysManAccount<AccountOf<T>>>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
-		pub sysman: Vec<(AccountOf<T>, SysManAccount<T>)>,
+		pub sysman: Vec<(AccountOf<T>, SysManAccount<AccountOf<T>>)>,
 	}
 
 	// Required to implement default for GenesisConfig.
@@ -239,8 +239,8 @@ pub mod pallet {
 			parent: Option<AccountOf<T>>,
 			children: Option<Vec<AccountOf<T>>>,
 			metadata: Vec<u8>,
-		) -> Result<SysManAccount<T>, Error<T>> {
-			let sysman = SysManAccount::<T> {
+		) -> Result<SysManAccount<AccountOf<T>>, Error<T>> {
+			let sysman = SysManAccount::<AccountOf<T>> {
 				role: role.clone(),
 				status,
 				level,
@@ -252,7 +252,7 @@ pub mod pallet {
 			Ok(sysman)
 		}			
 
-		pub fn get_account(account_id: &AccountOf<T>, role: OperationType) -> Result<SysManAccount<T>, Error<T>> {
+		pub fn get_account(account_id: &AccountOf<T>, role: OperationType) -> Result<SysManAccount<AccountOf<T>>, Error<T>> {
 			let account = match role {
 				OperationType::SYS => match <SysmanStorage<T>>::try_get(account_id) {
 					Ok(acct) => match acct.role {

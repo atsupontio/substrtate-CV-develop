@@ -320,6 +320,7 @@ construct_runtime!(
 		Sysman: pallet_sysman,
 		Account: pallet_account,
 		Cv: pallet_cv,
+		Utils: pallet_utils,
 	}
 );
 
