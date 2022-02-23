@@ -1,12 +1,14 @@
 use node_template_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
-	SystemConfig, WASM_BINARY, SysmanModuleConfig, pallet_sysman::{Role, RoleConfirm}
+	SystemConfig, WASM_BINARY, SysmanConfig,
 };
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use pallet_utils::{Role, Status};
+use pallet_sysman::SysManAccount;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -39,6 +41,20 @@ pub fn authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
 pub fn development_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
 
+	let root_authority = SysManAccount {
+		role: Role::SYSMAN,
+		status: Status::Active,
+		level: Some(0),
+		children: Some(vec![]),
+		parent: None,
+		metadata: r#"
+		{
+			"description": "root authority"
+		}"#
+		.as_bytes()
+		.to_vec(),
+	};
+
 	Ok(ChainSpec::from_genesis(
 		// Name
 		"Development",
@@ -61,14 +77,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				],
 				vec![(
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
-					None, // name
-					Role::SYSMAN,
-					RoleConfirm::No,
-					None, //org type
-					Some(1), // root
-					None, // parent sysman id
-					None, // cvenkey
-					None, // score
+					root_authority.clone(),
 				)],
 				true,
 			)
@@ -88,6 +97,20 @@ pub fn development_config() -> Result<ChainSpec, String> {
 
 pub fn local_testnet_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+
+	let root_authority = SysManAccount {
+		role: Role::SYSMAN,
+		status: Status::Active,
+		level: Some(0),
+		children: Some(vec![]),
+		parent: None,
+		metadata: r#"
+		{
+			"description": "root authority"
+		}"#
+		.as_bytes()
+		.to_vec(),
+	};
 
 	Ok(ChainSpec::from_genesis(
 		// Name
@@ -119,14 +142,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				],
 				vec![(
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
-					None, // name
-					Role::SYSMAN,
-					RoleConfirm::No,
-					None, //org type
-					Some(1), // root
-					None, // parent sysman id
-					None, // cvenkey
-					None, // score
+					root_authority.clone(),
 				)],
 				true,
 			)
@@ -150,17 +166,7 @@ fn testnet_genesis(
 	initial_authorities: Vec<(AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	get_sysman: Vec<(
-		AccountId,
-		Option<u8>, // developing
-		Role,
-		RoleConfirm, // Set by Sys-man only
-		Option<u8>, // developing
-		Option<u8>, // Set by Sys-man only
-		Option<node_template_runtime::Hash>, // Set by Sys-man only
-		Option<u8>, // developing
-		Option<u8>,
-		)>,
+	get_sysman: Vec<(AccountId, SysManAccount<node_template_runtime::Runtime>)>,
 	_enable_println: bool,
 ) -> GenesisConfig {
 	GenesisConfig {
@@ -172,6 +178,9 @@ fn testnet_genesis(
 			// Configure endowed accounts with initial balance of 1 << 60.
 			balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
 		},
+		sysman: SysmanConfig {
+			sysman: get_sysman.iter().map(|x| (x.0.clone(), x.1.clone())).collect(),
+		},
 		aura: AuraConfig {
 			authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),
 		},
@@ -181,10 +190,6 @@ fn testnet_genesis(
 		sudo: SudoConfig {
 			// Assign network admin rights.
 			key: root_key,
-		},
-		sysman_module: SysmanModuleConfig {
-			sysman: get_sysman.iter().cloned().map(|x| (x.0, x.1, x.2, x.3, x.4, x.5, x.6, x.7, x.8)).collect(),
-    		// kitties: vec![(5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY_i32, 0xd4b68690b203ad71c4a5f0a74b30839a, Female)],
 		},
 		transaction_payment: Default::default(),
 	}

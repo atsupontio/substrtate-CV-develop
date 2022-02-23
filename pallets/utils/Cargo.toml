@@ -1,5 +1,5 @@
 [package]
-name = "pallet-sysman"
+name = "pallet-utils"
 version = "4.0.0-dev"
 description = "FRAME pallet template for defining custom runtime logic."
 authors = ["Substrate DevHub <https://github.com/substrate-developer-hub>"]
@@ -17,13 +17,10 @@ codec = { package = "parity-scale-codec", version = "2.0.0", default-features = 
 	"derive",
 ] }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+serde = { features = ['derive'], optional = true, version = '1.0.119' }
 frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest"}
 frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
 frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest", optional = true }
-serde = { default-features = false, optional = true, version = '1.0' , features = ["derive"]}
-sp-runtime = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
-sp-std = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
-pallet-utils = { version = "4.0.0-dev", default-features = false, path = "../utils" }
 
 [dev-dependencies]
 sp-core = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
@@ -38,8 +35,6 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"frame-benchmarking/std",
-	"pallet-utils/std",
-	"sp-std/std",
 	"serde/std",
 ]
 
