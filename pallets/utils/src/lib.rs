@@ -14,17 +14,39 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+use frame_support::inherent::Vec;
+
+pub type TypeID = u32;
+pub type UnixEpoch = u64;
+pub type String = Vec<u8>;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 	use frame_support::{pallet_prelude::*, transactional, Twox64Concat};
-	use frame_system::pallet_prelude::*;
-	use frame_support::sp_runtime::traits::Hash;
 	use scale_info::TypeInfo;
 	
 	#[cfg(feature = "std")]
   	use serde::{Deserialize, Serialize};
+
+	#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+	#[scale_info(bounds(), skip_type_params(T))]
+	pub struct WhoAndWhen<T: Config> {
+		pub account: T::AccountId,
+		pub block: T::BlockNumber,
+		pub time: T::Moment,
+	}
+
+	impl <T: Config> WhoAndWhen<T> {
+		pub fn new(account: T::AccountId) -> Self {
+			WhoAndWhen {
+				account,
+				block: <frame_system::Pallet<T>>::block_number(),
+				time: <pallet_timestamp::Pallet<T>>::now(),
+			}
+		}
+	}
 
 	#[derive(Clone, Copy, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -57,7 +79,7 @@ pub mod pallet {
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_timestamp::Config{
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}

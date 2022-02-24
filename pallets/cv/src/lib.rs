@@ -16,12 +16,62 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::pallet_prelude::*;
+	use frame_support::{pallet_prelude::*, Twox64Concat};
 	use frame_system::pallet_prelude::*;
+	use pallet_utils::{TypeID, WhoAndWhen, UnixEpoch, String};
+
+	#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+	#[scale_info(bounds(), skip_type_params(T))]
+	pub struct Item<T: Config> {
+		item_id: TypeID,
+		user_id: T::AccountId,
+		created: WhoAndWhen<T>,
+		org_date: Option<UnixEpoch>,
+		exp_date: Option<UnixEpoch>,
+		certificate_id: Option<TypeID>,
+		score: u32,
+		metadata: String,
+	}
+
+	impl <T: Config> Item<T> {
+		pub fn new(
+			id: TypeID,
+			user_id: T::AccountId,
+			created_by: T::AccountId,
+			org_date: Option<UnixEpoch>,
+			exp_date: Option<UnixEpoch>,
+			certificate_id: Option<TypeID>,
+			score: u32,
+			metadata: String,
+		) -> Self {
+			Item {
+				item_id: id,
+				user_id,
+				created: WhoAndWhen::<T>::new(created_by),
+				org_date,
+				exp_date,
+				certificate_id,
+				score,
+				metadata
+			}
+		}
+	} 
+
+	#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+	pub enum Status {
+		Pending,
+		Allow,
+		Deny,
+	}
+	impl Default for Status {
+		fn default() -> Self {
+			Self::Pending
+		}
+	}
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_utils::Config{
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
@@ -33,10 +83,18 @@ pub mod pallet {
 	// The pallet's runtime storage items.
 	// https://docs.substrate.io/v3/runtime/storage
 	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
-	pub type Something<T> = StorageValue<_, u32>;
+	#[pallet::getter(fn item_by_id)]
+	pub type ItemById<T> = StorageMap<_, Twox64Concat, TypeID, Item<T>, OptionQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn item_by_account_id)]
+	pub type ItemByAccountId<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Vec<TypeID>, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn item_id)]
+	pub type ItemId<T> = StorageValue<_, TypeID, ValueQuery>;
+
+
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/v3/runtime/events-and-errors
@@ -45,16 +103,17 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
-		SomethingStored(u32, T::AccountId),
+		CreateSuceed(TypeID),
+		RevokeSuceed(TypeID),
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
+		ItemNotFound,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
+
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -64,39 +123,49 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/v3/runtime/origins
+		#[pallet::weight(10_000)]
+		pub fn create_item(
+			origin: OriginFor<T>,
+			id: TypeID,
+			user_id: T::AccountId,
+			created_by: T::AccountId,
+			org_date: Option<UnixEpoch>,
+			exp_date: Option<UnixEpoch>,
+			certificate_id: Option<TypeID>,
+			score: u32,
+			metadata: String,
+		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
+			let id = Self::item_id();
+			let new_item: Item<T> = Item::new(id, user_id, who.clone(), org_date, exp_date, certificate_id, 0, metadata);
 
-			// Update storage.
-			<Something<T>>::put(something);
+			<ItemById<T>>::insert(id, new_item);
+			<ItemByAccountId<T>>::mutate(who, |x| x.push(id));
+			<ItemId<T>>::mutate(|n| *n + 1);
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored(something, who));
-			// Return a successful DispatchResultWithPostInfo
+			Self::deposit_event(Event::CreateSuceed(id));
+
 			Ok(())
+
 		}
 
 		/// An example dispatchable that may throw a custom error.
-		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => Err(Error::<T>::NoneValue)?,
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
+		#[pallet::weight(10_000)]
+		pub fn revoke_error(origin: OriginFor<T>, item_id: TypeID, account_id: T::AccountId) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			let idx = Self::item_by_account_id(&account_id).iter().position(|x| *x == item_id);
+			ensure!(idx != None, Error::<T>::ItemNotFound);
+			if let Some(iid) = idx {
+				<ItemByAccountId<T>>::mutate(&who, |x| x.swap_remove(iid));
 			}
+			<ItemById<T>>::remove(&item_id);
+			Self::deposit_event(Event::RevokeSuceed(item_id));
+			Ok(())
+		}
+
+		#[pallet::wight(10_000)]
+		pub fn set_status_item(origin: OriginFor<T>, status: Status) {
+			
 		}
 	}
 }
